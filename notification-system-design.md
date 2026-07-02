@@ -571,4 +571,123 @@ Example document:
 }
 ```
 
-However, for this system, **MySQL** is preferred because the data is structured and has clear relationships between users and notifications.
+For this system, **MySQL** is preferred because the data is structured and has clear relationships between users and notifications.
+
+---
+
+# Stage 3 – Query Optimization
+
+## Given Query
+
+```sql
+SELECT *
+FROM notifications
+WHERE studentID = 1042
+AND isRead = false
+ORDER BY createdAt ASC;
+```
+
+---
+
+## Is the Query Accurate?
+
+The query is correct if all unread notifications for a particular student are stored in the **notifications** table. However, in the database schema designed in Stage 2, the read status belongs to the **user_notifications** table because each notification can be sent to multiple users. Therefore, the query should use the **user_notifications** table.
+
+---
+
+## Why is the Query Slow?
+
+The database contains around **50,000 students** and **5,000,000 notifications**. Without proper indexing, the database must scan a large number of rows before finding the required records.
+
+The query is also selecting every column using `SELECT *`, which transfers unnecessary data and increases execution time.
+
+Sorting the results using `ORDER BY createdAt` also becomes expensive if the column is not indexed.
+
+---
+
+## Optimized Query
+
+```sql
+SELECT n.id,
+       n.title,
+       n.message,
+       n.notification_type,
+       n.priority,
+       n.created_at
+FROM notifications n
+JOIN user_notifications un
+ON n.id = un.notification_id
+WHERE un.user_id = 1042
+AND un.is_read = FALSE
+ORDER BY n.created_at DESC;
+```
+
+---
+
+## Recommended Indexes
+
+Create indexes only on columns that are frequently used in filtering, joining, or sorting.
+
+```sql
+CREATE INDEX idx_user_notifications_user_read
+ON user_notifications(user_id, is_read);
+
+CREATE INDEX idx_notifications_created_at
+ON notifications(created_at);
+
+CREATE INDEX idx_notifications_type
+ON notifications(notification_type);
+```
+
+---
+
+## Computational Cost
+
+- Without indexes, the database performs a full table scan, which is approximately **O(n)**.
+- With proper indexes, searching becomes much faster, approximately **O(log n)**.
+- Sorting is also improved when indexed columns are used.
+
+---
+
+## Should We Add Indexes on Every Column?
+
+No.
+
+Adding indexes to every column is not a good practice because:
+
+- Indexes consume additional storage.
+- INSERT, UPDATE, and DELETE operations become slower since every index must also be updated.
+- Many indexes may never be used by queries.
+- Database maintenance becomes more expensive.
+
+Indexes should only be created on columns that are frequently searched, filtered, joined, or sorted.
+
+---
+
+## Query to Find Students Who Received Placement Notifications in the Last 7 Days
+
+```sql
+SELECT DISTINCT u.id,
+       u.name,
+       u.email
+FROM users u
+JOIN user_notifications un
+ON u.id = un.user_id
+JOIN notifications n
+ON un.notification_id = n.id
+WHERE n.notification_type = 'Placement'
+AND n.created_at >= NOW() - INTERVAL 7 DAY;
+```
+
+---
+
+## Summary
+
+To improve query performance:
+
+- Use JOINs based on the database schema.
+- Avoid using `SELECT *`.
+- Create indexes only where necessary.
+- Use pagination when retrieving notifications.
+- Archive old notification records if the table becomes very large.
+- Regularly analyze and optimize database indexes.
