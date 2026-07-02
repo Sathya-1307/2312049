@@ -691,3 +691,146 @@ To improve query performance:
 - Use pagination when retrieving notifications.
 - Archive old notification records if the table becomes very large.
 - Regularly analyze and optimize database indexes.
+
+---
+
+# Stage 4 – Performance Improvement
+
+## Problem
+
+Currently, notifications are fetched from the database every time a student opens or refreshes a page. As the number of users increases, the database receives a large number of repeated requests, which increases server load and slows down the application.
+
+---
+
+## Proposed Solutions
+
+### 1. Use Pagination
+
+Instead of loading all notifications, load a limited number of records at a time.
+
+Example:
+
+```http
+GET /api/notifications?page=1&limit=20
+```
+
+**Advantages**
+
+- Reduces database load.
+- Faster response time.
+- Less data transferred over the network.
+
+**Tradeoff**
+
+- Users need to navigate between pages or use infinite scrolling.
+
+---
+
+### 2. Use Caching
+
+Frequently accessed notifications can be stored in **Redis** or an in-memory cache instead of querying the database every time.
+
+**Advantages**
+
+- Faster response.
+- Reduces repeated database queries.
+- Improves overall application performance.
+
+**Tradeoff**
+
+- Cache must be updated whenever notifications change.
+- Requires additional memory.
+
+---
+
+### 3. Load Only New Notifications
+
+Instead of requesting all notifications on every page load, request only notifications created after the user's last visit.
+
+Example:
+
+```http
+GET /api/notifications?lastSeen=2026-07-02T09:30:00
+```
+
+**Advantages**
+
+- Smaller API responses.
+- Lower database load.
+
+**Tradeoff**
+
+- Requires storing each user's last viewed timestamp.
+
+---
+
+### 4. Real-Time Notifications Using WebSocket
+
+Maintain a WebSocket connection between the client and server. New notifications are pushed automatically without repeated API requests.
+
+**Advantages**
+
+- Instant notification delivery.
+- Eliminates unnecessary polling.
+- Better user experience.
+
+**Tradeoff**
+
+- More complex backend implementation.
+- Server must manage active WebSocket connections.
+
+---
+
+### 5. Database Indexing
+
+Create indexes on frequently searched columns such as:
+
+- user_id
+- notification_id
+- created_at
+- notification_type
+
+**Advantages**
+
+- Faster search and sorting.
+- Improved query performance.
+
+**Tradeoff**
+
+- Additional storage space.
+- Slightly slower INSERT and UPDATE operations.
+
+---
+
+### 6. Archive Old Notifications
+
+Move notifications older than a specific period (for example, one year) into an archive table.
+
+**Advantages**
+
+- Reduces the size of the active table.
+- Improves query performance.
+
+**Tradeoff**
+
+- Archived data requires a separate retrieval process.
+
+---
+
+## Recommended Approach
+
+For this notification system, I would use the following combination:
+
+- Pagination for loading notifications.
+- Redis caching for frequently accessed data.
+- WebSocket for real-time notification delivery.
+- Proper database indexes.
+- Archive old notifications periodically.
+
+This combination minimizes database load, improves response time, and provides a better experience for users while keeping the system scalable.
+
+---
+
+## Conclusion
+
+Fetching notifications from the database on every page load is not efficient for a large application. Using pagination, caching, WebSocket communication, indexing, and data archiving significantly improves performance while ensuring the system remains scalable as the number of users and notifications increases.
