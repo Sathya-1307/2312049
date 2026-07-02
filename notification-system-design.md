@@ -834,3 +834,129 @@ This combination minimizes database load, improves response time, and provides a
 ## Conclusion
 
 Fetching notifications from the database on every page load is not efficient for a large application. Using pagination, caching, WebSocket communication, indexing, and data archiving significantly improves performance while ensuring the system remains scalable as the number of users and notifications increases.
+
+---
+
+# Stage 5 – Reliable Notification Delivery
+
+## Problems with the Current Approach
+
+The current implementation processes each student one by one. For every student, it sends an email, stores the notification in the database, and pushes the in-app notification immediately.
+
+This approach has several drawbacks:
+
+- If sending an email fails, the remaining students may never receive notifications.
+- Processing 50,000 students sequentially is very slow.
+- Email delivery, database operations, and push notifications are tightly coupled.
+- A temporary failure can interrupt the complete process.
+- There is no retry mechanism for failed operations.
+- The system cannot scale efficiently during peak usage.
+
+---
+
+## Handling Email Failures
+
+If email delivery fails for some students, the process should not stop.
+
+The failed email requests should be logged and added to a retry queue. The remaining students should continue receiving notifications without interruption.
+
+A background worker can retry failed emails after a fixed interval until delivery succeeds or the retry limit is reached.
+
+---
+
+## Improved Design
+
+Instead of processing everything in one loop, separate the work into independent tasks.
+
+1. Save the notification in the database.
+2. Add email jobs to a message queue.
+3. Add in-app notification jobs to another queue.
+4. Background workers process these queues independently.
+5. Failed jobs are retried automatically.
+
+Using a message queue improves reliability and allows multiple workers to process notifications in parallel.
+
+---
+
+## Revised Pseudocode
+
+```text
+function notify_all(studentIds, message):
+
+    notificationId = save_notification(message)
+
+    for each studentId in studentIds:
+
+        save_user_notification(studentId, notificationId)
+
+        emailQueue.push({
+            studentId,
+            notificationId
+        })
+
+        pushQueue.push({
+            studentId,
+            notificationId
+        })
+```
+
+---
+
+## Email Worker
+
+```text
+while emailQueue is not empty:
+
+    job = emailQueue.pop()
+
+    try:
+        sendEmail(job.studentId)
+
+    catch error:
+        retry(job)
+```
+
+---
+
+## Push Notification Worker
+
+```text
+while pushQueue is not empty:
+
+    job = pushQueue.pop()
+
+    try:
+        sendPushNotification(job.studentId)
+
+    catch error:
+        retry(job)
+```
+
+---
+
+## Should Database Save and Email Sending Happen Together?
+
+No.
+
+Saving the notification to the database and sending emails should be handled separately.
+
+The notification should first be stored successfully in the database. Once it is saved, background workers can send emails and push notifications independently.
+
+This approach ensures that notifications are not lost even if the email service is temporarily unavailable.
+
+---
+
+## Benefits
+
+- Faster processing for large numbers of users.
+- Better fault tolerance.
+- Failed emails can be retried automatically.
+- Database operations remain reliable.
+- Multiple workers can process jobs simultaneously.
+- Easier to scale as the number of users grows.
+
+---
+
+## Conclusion
+
+For a system serving around 50,000 students, using asynchronous processing with message queues and background workers provides a much more reliable and scalable solution than processing each notification sequentially.
